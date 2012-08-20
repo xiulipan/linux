@@ -21,13 +21,14 @@ ALC267/268
 ==========
   inv-dmic	Inverted internal mic workaround
 
-ALC269
+ALC269/270/275/276/280/282
 ======
   laptop-amic	Laptops with analog-mic input
   laptop-dmic	Laptops with digital-mic input
   alc269-dmic	Enable ALC269(VA) digital mic workaround
   alc271-dmic	Enable ALC271X digital mic workaround
   inv-dmic	Inverted internal mic workaround
+  lenovo-dock   Enables docking station I/O for some Lenovos
 
 ALC662/663/272
 ==============
@@ -52,6 +53,7 @@ ALC882/883/885/888/889
   acer-aspire-8930g	Acer Aspire 8330G/6935G
   acer-aspire		Acer Aspire others
   inv-dmic	Inverted internal mic workaround
+  no-primary-hp		VAIO Z workaround (for fixed speaker DAC)
 
 ALC861/660
 ==========
@@ -272,6 +274,10 @@ STAC92HD83*
   dell-s14	Dell laptop
   dell-vostro-3500	Dell Vostro 3500 laptop
   hp-dv7-4000	HP dv-7 4000
+  hp_cNB11_intquad HP CNB models with 4 speakers
+  hp-zephyr	HP Zephyr
+  hp-led	HP with broken BIOS for mute LED
+  hp-inv-led	HP with broken BIOS for inverted mute LED
   auto		BIOS setup (default)
 
 STAC9872

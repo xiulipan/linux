@@ -876,7 +876,8 @@ static int hdmi_pcm_open(struct hda_pcm_stream *hinfo,
 	struct hdmi_spec_per_pin *per_pin;
 	struct hdmi_eld *eld;
 	struct hdmi_spec_per_cvt *per_cvt = NULL;
-	int pinctl;
+
+	hinfo->nid = 0; /* clear the leftover value */
 
 	/* Validate hinfo */
 	pin_idx = hinfo_to_pin_index(spec, hinfo);
@@ -912,11 +913,6 @@ static int hdmi_pcm_open(struct hda_pcm_stream *hinfo,
 	snd_hda_codec_write(codec, per_pin->pin_nid, 0,
 			    AC_VERB_SET_CONNECT_SEL,
 			    mux_idx);
-	pinctl = snd_hda_codec_read(codec, per_pin->pin_nid, 0,
-				    AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
-	snd_hda_codec_write(codec, per_pin->pin_nid, 0,
-			    AC_VERB_SET_PIN_WIDGET_CONTROL,
-			    pinctl | PIN_OUT);
 	snd_hda_spdif_ctls_assign(codec, pin_idx, per_cvt->cvt_nid);
 
 	/* Initially set the converter's capabilities */
@@ -1153,25 +1149,29 @@ static int generic_hdmi_playback_pcm_prepare(struct hda_pcm_stream *hinfo,
 	struct hdmi_spec *spec = codec->spec;
 	int pin_idx = hinfo_to_pin_index(spec, hinfo);
 	hda_nid_t pin_nid = spec->pins[pin_idx].pin_nid;
+	int pinctl;
 
 	hdmi_set_channel_count(codec, cvt_nid, substream->runtime->channels);
 
 	hdmi_setup_audio_infoframe(codec, pin_idx, substream);
 
+	pinctl = snd_hda_codec_read(codec, pin_nid, 0,
+				    AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
+	snd_hda_codec_write(codec, pin_nid, 0,
+			    AC_VERB_SET_PIN_WIDGET_CONTROL, pinctl | PIN_OUT);
+
 	return hdmi_setup_stream(codec, cvt_nid, pin_nid, stream_tag, format);
 }
 
-static int generic_hdmi_playback_pcm_cleanup(struct hda_pcm_stream *hinfo,
-					     struct hda_codec *codec,
-					     struct snd_pcm_substream *substream)
+static int hdmi_pcm_close(struct hda_pcm_stream *hinfo,
+			  struct hda_codec *codec,
+			  struct snd_pcm_substream *substream)
 {
 	struct hdmi_spec *spec = codec->spec;
 	int cvt_idx, pin_idx;
 	struct hdmi_spec_per_cvt *per_cvt;
 	struct hdmi_spec_per_pin *per_pin;
 	int pinctl;
-
-	snd_hda_codec_cleanup_stream(codec, hinfo->nid);
 
 	if (hinfo->nid) {
 		cvt_idx = cvt_nid_to_cvt_index(spec, hinfo->nid);
@@ -1195,14 +1195,13 @@ static int generic_hdmi_playback_pcm_cleanup(struct hda_pcm_stream *hinfo,
 				    pinctl & ~PIN_OUT);
 		snd_hda_spdif_ctls_unassign(codec, pin_idx);
 	}
-
 	return 0;
 }
 
 static const struct hda_pcm_ops generic_ops = {
 	.open = hdmi_pcm_open,
+	.close = hdmi_pcm_close,
 	.prepare = generic_hdmi_playback_pcm_prepare,
-	.cleanup = generic_hdmi_playback_pcm_cleanup,
 };
 
 static int generic_hdmi_build_pcms(struct hda_codec *codec)
@@ -1221,6 +1220,7 @@ static int generic_hdmi_build_pcms(struct hda_codec *codec)
 		pstr = &info->stream[SNDRV_PCM_STREAM_PLAYBACK];
 		pstr->substreams = 1;
 		pstr->ops = generic_ops;
+		pstr->nid = 1; /* FIXME: just for avoiding a debug WARNING */
 		/* other pstr fields are set in open */
 	}
 
@@ -1914,6 +1914,7 @@ static const struct hda_codec_preset snd_hda_preset_hdmi[] = {
 { .id = 0x10de0042, .name = "GPU 42 HDMI/DP",	.patch = patch_generic_hdmi },
 { .id = 0x10de0043, .name = "GPU 43 HDMI/DP",	.patch = patch_generic_hdmi },
 { .id = 0x10de0044, .name = "GPU 44 HDMI/DP",	.patch = patch_generic_hdmi },
+{ .id = 0x10de0051, .name = "GPU 51 HDMI/DP",	.patch = patch_generic_hdmi },
 { .id = 0x10de0067, .name = "MCP67 HDMI",	.patch = patch_nvhdmi_2ch },
 { .id = 0x10de8001, .name = "MCP73 HDMI",	.patch = patch_nvhdmi_2ch },
 { .id = 0x11069f80, .name = "VX900 HDMI/DP",	.patch = patch_via_hdmi },
@@ -1927,6 +1928,7 @@ static const struct hda_codec_preset snd_hda_preset_hdmi[] = {
 { .id = 0x80862804, .name = "IbexPeak HDMI",	.patch = patch_generic_hdmi },
 { .id = 0x80862805, .name = "CougarPoint HDMI",	.patch = patch_generic_hdmi },
 { .id = 0x80862806, .name = "PantherPoint HDMI", .patch = patch_generic_hdmi },
+{ .id = 0x80862807, .name = "Haswell HDMI",	.patch = patch_generic_hdmi },
 { .id = 0x80862880, .name = "CedarTrail HDMI",	.patch = patch_generic_hdmi },
 { .id = 0x808629fb, .name = "Crestline HDMI",	.patch = patch_generic_hdmi },
 {} /* terminator */
@@ -1964,6 +1966,7 @@ MODULE_ALIAS("snd-hda-codec-id:10de0041");
 MODULE_ALIAS("snd-hda-codec-id:10de0042");
 MODULE_ALIAS("snd-hda-codec-id:10de0043");
 MODULE_ALIAS("snd-hda-codec-id:10de0044");
+MODULE_ALIAS("snd-hda-codec-id:10de0051");
 MODULE_ALIAS("snd-hda-codec-id:10de0067");
 MODULE_ALIAS("snd-hda-codec-id:10de8001");
 MODULE_ALIAS("snd-hda-codec-id:11069f80");
@@ -1978,6 +1981,7 @@ MODULE_ALIAS("snd-hda-codec-id:80862803");
 MODULE_ALIAS("snd-hda-codec-id:80862804");
 MODULE_ALIAS("snd-hda-codec-id:80862805");
 MODULE_ALIAS("snd-hda-codec-id:80862806");
+MODULE_ALIAS("snd-hda-codec-id:80862807");
 MODULE_ALIAS("snd-hda-codec-id:80862880");
 MODULE_ALIAS("snd-hda-codec-id:808629fb");
 

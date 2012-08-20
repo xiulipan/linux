@@ -174,7 +174,6 @@ struct alc_spec {
 
 	/* hooks */
 	void (*init_hook)(struct hda_codec *codec);
-	void (*unsol_event)(struct hda_codec *codec, unsigned int res);
 #ifdef CONFIG_SND_HDA_POWER_SAVE
 	void (*power_hook)(struct hda_codec *codec);
 #endif
@@ -204,6 +203,7 @@ struct alc_spec {
 	unsigned int shared_mic_hp:1; /* HP/Mic-in sharing */
 	unsigned int inv_dmic_fixup:1; /* has inverted digital-mic workaround */
 	unsigned int inv_dmic_muted:1; /* R-ch of inv d-mic is muted? */
+	unsigned int no_primary_hp:1; /* Don't prefer HP pins to speaker pins */
 
 	/* auto-mute control */
 	int automute_mode;
@@ -303,6 +303,38 @@ static inline hda_nid_t get_capsrc(struct alc_spec *spec, int idx)
 static void call_update_outputs(struct hda_codec *codec);
 static void alc_inv_dmic_sync(struct hda_codec *codec, bool force);
 
+/* for shared I/O, change the pin-control accordingly */
+static void update_shared_mic_hp(struct hda_codec *codec, bool set_as_mic)
+{
+	struct alc_spec *spec = codec->spec;
+	unsigned int val;
+	hda_nid_t pin = spec->autocfg.inputs[1].pin;
+	/* NOTE: this assumes that there are only two inputs, the
+	 * first is the real internal mic and the second is HP/mic jack.
+	 */
+
+	val = snd_hda_get_default_vref(codec, pin);
+
+	/* This pin does not have vref caps - let's enable vref on pin 0x18
+	   instead, as suggested by Realtek */
+	if (val == AC_PINCTL_VREF_HIZ) {
+		const hda_nid_t vref_pin = 0x18;
+		/* Sanity check pin 0x18 */
+		if (get_wcaps_type(get_wcaps(codec, vref_pin)) == AC_WID_PIN &&
+		    get_defcfg_connect(snd_hda_codec_get_pincfg(codec, vref_pin)) == AC_JACK_PORT_NONE) {
+			unsigned int vref_val = snd_hda_get_default_vref(codec, vref_pin);
+			if (vref_val != AC_PINCTL_VREF_HIZ)
+				snd_hda_set_pin_ctl(codec, vref_pin, PIN_IN | (set_as_mic ? vref_val : 0));
+		}
+	}
+
+	val = set_as_mic ? val | PIN_IN : PIN_HP;
+	snd_hda_set_pin_ctl(codec, pin, val);
+
+	spec->automute_speaker = !set_as_mic;
+	call_update_outputs(codec);
+}
+
 /* select the given imux item; either unmute exclusively or select the route */
 static int alc_mux_select(struct hda_codec *codec, unsigned int adc_idx,
 			  unsigned int idx, bool force)
@@ -329,21 +361,8 @@ static int alc_mux_select(struct hda_codec *codec, unsigned int adc_idx,
 		return 0;
 	spec->cur_mux[adc_idx] = idx;
 
-	/* for shared I/O, change the pin-control accordingly */
-	if (spec->shared_mic_hp) {
-		unsigned int val;
-		hda_nid_t pin = spec->autocfg.inputs[1].pin;
-		/* NOTE: this assumes that there are only two inputs, the
-		 * first is the real internal mic and the second is HP jack.
-		 */
-		if (spec->cur_mux[adc_idx])
-			val = snd_hda_get_default_vref(codec, pin) | PIN_IN;
-		else
-			val = PIN_HP;
-		snd_hda_set_pin_ctl(codec, pin, val);
-		spec->automute_speaker = !spec->cur_mux[adc_idx];
-		call_update_outputs(codec);
-	}
+	if (spec->shared_mic_hp)
+		update_shared_mic_hp(codec, spec->cur_mux[adc_idx]);
 
 	if (spec->dyn_adc_switch) {
 		alc_dyn_adc_pcm_resetup(codec, idx);
@@ -669,7 +688,7 @@ static void alc_update_knob_master(struct hda_codec *codec, hda_nid_t nid)
 }
 
 /* unsolicited event for HP jack sensing */
-static void alc_sku_unsol_event(struct hda_codec *codec, unsigned int res)
+static void alc_unsol_event(struct hda_codec *codec, unsigned int res)
 {
 	int action;
 
@@ -1005,11 +1024,9 @@ static void alc_init_automute(struct hda_codec *codec)
 	spec->automute_lo = spec->automute_lo_possible;
 	spec->automute_speaker = spec->automute_speaker_possible;
 
-	if (spec->automute_speaker_possible || spec->automute_lo_possible) {
+	if (spec->automute_speaker_possible || spec->automute_lo_possible)
 		/* create a control for automute mode */
 		alc_add_automute_mode_enum(codec);
-		spec->unsol_event = alc_sku_unsol_event;
-	}
 }
 
 /* return the position of NID in the list, or -1 if not found */
@@ -1172,7 +1189,6 @@ static void alc_init_auto_mic(struct hda_codec *codec)
 
 	snd_printdd("realtek: Enable auto-mic switch on NID 0x%x/0x%x/0x%x\n",
 		    ext, fixed, dock);
-	spec->unsol_event = alc_sku_unsol_event;
 }
 
 /* check the availabilities of auto-mute and auto-mic switches */
@@ -1982,13 +1998,31 @@ static int __alc_build_controls(struct hda_codec *codec)
 	return 0;
 }
 
-static int alc_build_controls(struct hda_codec *codec)
+static int alc_build_jacks(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
+
+	if (spec->shared_mic_hp) {
+		int err;
+		int nid = spec->autocfg.inputs[1].pin;
+		err = snd_hda_jack_add_kctl(codec, nid, "Headphone Mic", 0);
+		if (err < 0)
+			return err;
+		err = snd_hda_jack_detect_enable(codec, nid, 0);
+		if (err < 0)
+			return err;
+	}
+
+	return snd_hda_jack_add_kctls(codec, &spec->autocfg);
+}
+
+static int alc_build_controls(struct hda_codec *codec)
+{
 	int err = __alc_build_controls(codec);
 	if (err < 0)
 		return err;
-	err = snd_hda_jack_add_kctls(codec, &spec->autocfg);
+
+	err = alc_build_jacks(codec);
 	if (err < 0)
 		return err;
 	alc_apply_fixup(codec, ALC_FIXUP_ACT_BUILD);
@@ -2023,14 +2057,6 @@ static int alc_init(struct hda_codec *codec)
 
 	hda_call_check_power_status(codec, 0x01);
 	return 0;
-}
-
-static void alc_unsol_event(struct hda_codec *codec, unsigned int res)
-{
-	struct alc_spec *spec = codec->spec;
-
-	if (spec->unsol_event)
-		spec->unsol_event(codec, res);
 }
 
 #ifdef CONFIG_SND_HDA_POWER_SAVE
@@ -2417,7 +2443,7 @@ static void alc_power_eapd(struct hda_codec *codec)
 	alc_auto_setup_eapd(codec, false);
 }
 
-static int alc_suspend(struct hda_codec *codec, pm_message_t state)
+static int alc_suspend(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
 	alc_shutup(codec);
@@ -4234,14 +4260,12 @@ static void set_capture_mixer(struct hda_codec *codec)
  */
 static void alc_auto_init_std(struct hda_codec *codec)
 {
-	struct alc_spec *spec = codec->spec;
 	alc_auto_init_multi_out(codec);
 	alc_auto_init_extra_out(codec);
 	alc_auto_init_analog_input(codec);
 	alc_auto_init_input_src(codec);
 	alc_auto_init_digital(codec);
-	if (spec->unsol_event)
-		alc_inithook(codec);
+	alc_inithook(codec);
 }
 
 /*
@@ -4300,7 +4324,8 @@ static int alc_parse_auto_config(struct hda_codec *codec,
 		return 0; /* can't find valid BIOS pin config */
 	}
 
-	if (cfg->line_out_type == AUTO_PIN_SPEAKER_OUT &&
+	if (!spec->no_primary_hp &&
+	    cfg->line_out_type == AUTO_PIN_SPEAKER_OUT &&
 	    cfg->line_outs <= cfg->hp_outs) {
 		/* use HP as primary out */
 		cfg->speaker_outs = cfg->line_outs;
@@ -4842,7 +4867,6 @@ static void alc260_fixup_gpio1_toggle(struct hda_codec *codec,
 		spec->automute_speaker = 1;
 		spec->autocfg.hp_pins[0] = 0x0f; /* copy it for automute */
 		snd_hda_jack_detect_enable(codec, 0x0f, ALC_HP_EVENT);
-		spec->unsol_event = alc_sku_unsol_event;
 		snd_hda_gen_add_verbs(&spec->gen, alc_gpio1_init_verbs);
 	}
 }
@@ -5028,6 +5052,7 @@ enum {
 	ALC889_FIXUP_MBP_VREF,
 	ALC889_FIXUP_IMAC91_VREF,
 	ALC882_FIXUP_INV_DMIC,
+	ALC882_FIXUP_NO_PRIMARY_HP,
 };
 
 static void alc889_fixup_coef(struct hda_codec *codec,
@@ -5147,6 +5172,17 @@ static void alc889_fixup_imac91_vref(struct hda_codec *codec,
 		snd_hda_set_pin_ctl(codec, nids[i], val);
 	}
 	spec->keep_vref_in_automute = 1;
+}
+
+/* Don't take HP output as primary
+ * strangely, the speaker output doesn't work on VAIO Z through DAC 0x05
+ */
+static void alc882_fixup_no_primary_hp(struct hda_codec *codec,
+				       const struct alc_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+	if (action == ALC_FIXUP_ACT_PRE_PROBE)
+		spec->no_primary_hp = 1;
 }
 
 static const struct alc_fixup alc882_fixups[] = {
@@ -5335,6 +5371,10 @@ static const struct alc_fixup alc882_fixups[] = {
 		.type = ALC_FIXUP_FUNC,
 		.v.func = alc_fixup_inv_dmic_0x12,
 	},
+	[ALC882_FIXUP_NO_PRIMARY_HP] = {
+		.type = ALC_FIXUP_FUNC,
+		.v.func = alc882_fixup_no_primary_hp,
+	},
 };
 
 static const struct snd_pci_quirk alc882_fixup_tbl[] = {
@@ -5369,6 +5409,7 @@ static const struct snd_pci_quirk alc882_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1043, 0x1971, "Asus W2JC", ALC882_FIXUP_ASUS_W2JC),
 	SND_PCI_QUIRK(0x1043, 0x835f, "Asus Eee 1601", ALC888_FIXUP_EEE1601),
 	SND_PCI_QUIRK(0x104d, 0x9047, "Sony Vaio TT", ALC889_FIXUP_VAIO_TT),
+	SND_PCI_QUIRK(0x104d, 0x905a, "Sony Vaio Z", ALC882_FIXUP_NO_PRIMARY_HP),
 
 	/* All Apple entries are in codec SSIDs */
 	SND_PCI_QUIRK(0x106b, 0x00a0, "MacBookPro 3,1", ALC889_FIXUP_MBP_VREF),
@@ -5410,6 +5451,7 @@ static const struct alc_model_fixup alc882_fixup_models[] = {
 	{.id = ALC882_FIXUP_ACER_ASPIRE_8930G, .name = "acer-aspire-8930g"},
 	{.id = ALC883_FIXUP_ACER_EAPD, .name = "acer-aspire"},
 	{.id = ALC882_FIXUP_INV_DMIC, .name = "inv-dmic"},
+	{.id = ALC882_FIXUP_NO_PRIMARY_HP, .name = "no-primary-hp"},
 	{}
 };
 
@@ -5859,6 +5901,15 @@ static int alc269_resume(struct hda_codec *codec)
 }
 #endif /* CONFIG_PM */
 
+static void alc269_fixup_pincfg_no_hp_to_lineout(struct hda_codec *codec,
+						 const struct alc_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+
+	if (action == ALC_FIXUP_ACT_PRE_PROBE)
+		spec->parse_flags = HDA_PINCFG_NO_HP_FIXUP;
+}
+
 static void alc269_fixup_hweq(struct hda_codec *codec,
 			       const struct alc_fixup *fix, int action)
 {
@@ -5985,6 +6036,8 @@ enum {
 	ALC269VB_FIXUP_DMIC,
 	ALC269_FIXUP_MIC2_MUTE_LED,
 	ALC269_FIXUP_INV_DMIC,
+	ALC269_FIXUP_LENOVO_DOCK,
+	ALC269_FIXUP_PINCFG_NO_HP_TO_LINEOUT,
 };
 
 static const struct alc_fixup alc269_fixups[] = {
@@ -6113,6 +6166,20 @@ static const struct alc_fixup alc269_fixups[] = {
 		.type = ALC_FIXUP_FUNC,
 		.v.func = alc_fixup_inv_dmic_0x12,
 	},
+	[ALC269_FIXUP_LENOVO_DOCK] = {
+		.type = ALC_FIXUP_PINS,
+		.v.pins = (const struct alc_pincfg[]) {
+			{ 0x19, 0x23a11040 }, /* dock mic */
+			{ 0x1b, 0x2121103f }, /* dock headphone */
+			{ }
+		},
+		.chained = true,
+		.chain_id = ALC269_FIXUP_PINCFG_NO_HP_TO_LINEOUT
+	},
+	[ALC269_FIXUP_PINCFG_NO_HP_TO_LINEOUT] = {
+		.type = ALC_FIXUP_FUNC,
+		.v.func = alc269_fixup_pincfg_no_hp_to_lineout,
+	},
 };
 
 static const struct snd_pci_quirk alc269_fixup_tbl[] = {
@@ -6139,6 +6206,7 @@ static const struct snd_pci_quirk alc269_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x17aa, 0x21b8, "Thinkpad Edge 14", ALC269_FIXUP_SKU_IGNORE),
 	SND_PCI_QUIRK(0x17aa, 0x21ca, "Thinkpad L412", ALC269_FIXUP_SKU_IGNORE),
 	SND_PCI_QUIRK(0x17aa, 0x21e9, "Thinkpad Edge 15", ALC269_FIXUP_SKU_IGNORE),
+	SND_PCI_QUIRK(0x17aa, 0x2203, "Thinkpad X230 Tablet", ALC269_FIXUP_LENOVO_DOCK),
 	SND_PCI_QUIRK(0x17aa, 0x3bf8, "Quanta FL1", ALC269_FIXUP_QUANTA_MUTE),
 	SND_PCI_QUIRK(0x17aa, 0x3bf8, "Lenovo Ideapd", ALC269_FIXUP_PCM_44K),
 	SND_PCI_QUIRK(0x17aa, 0x9e54, "LENOVO NB", ALC269_FIXUP_LENOVO_EAPD),
@@ -6200,6 +6268,7 @@ static const struct alc_model_fixup alc269_fixup_models[] = {
 	{.id = ALC269_FIXUP_STEREO_DMIC, .name = "alc269-dmic"},
 	{.id = ALC271_FIXUP_DMIC, .name = "alc271-dmic"},
 	{.id = ALC269_FIXUP_INV_DMIC, .name = "inv-dmic"},
+	{.id = ALC269_FIXUP_LENOVO_DOCK, .name = "lenovo-dock"},
 	{}
 };
 
@@ -6851,6 +6920,31 @@ static const struct alc_model_fixup alc662_fixup_models[] = {
 	{}
 };
 
+static void alc662_fill_coef(struct hda_codec *codec)
+{
+	int val, coef;
+
+	coef = alc_get_coef0(codec);
+
+	switch (codec->vendor_id) {
+	case 0x10ec0662:
+		if ((coef & 0x00f0) == 0x0030) {
+			val = alc_read_coef_idx(codec, 0x4); /* EAPD Ctrl */
+			alc_write_coef_idx(codec, 0x4, val & ~(1<<10));
+		}
+		break;
+	case 0x10ec0272:
+	case 0x10ec0273:
+	case 0x10ec0663:
+	case 0x10ec0665:
+	case 0x10ec0670:
+	case 0x10ec0671:
+	case 0x10ec0672:
+		val = alc_read_coef_idx(codec, 0xd); /* EAPD Ctrl */
+		alc_write_coef_idx(codec, 0xd, val | (1<<14));
+		break;
+	}
+}
 
 /*
  */
@@ -6869,6 +6963,9 @@ static int patch_alc662(struct hda_codec *codec)
 	spec->parse_flags = HDA_PINCFG_NO_HP_FIXUP;
 
 	alc_fix_pll_init(codec, 0x20, 0x04, 15);
+
+	spec->init_hook = alc662_fill_coef;
+	alc662_fill_coef(codec);
 
 	alc_pick_fixup(codec, alc662_fixup_models,
 		       alc662_fixup_tbl, alc662_fixups);
@@ -6966,6 +7063,7 @@ static const struct hda_codec_preset snd_hda_preset_realtek[] = {
 	{ .id = 0x10ec0275, .name = "ALC275", .patch = patch_alc269 },
 	{ .id = 0x10ec0276, .name = "ALC276", .patch = patch_alc269 },
 	{ .id = 0x10ec0280, .name = "ALC280", .patch = patch_alc269 },
+	{ .id = 0x10ec0282, .name = "ALC282", .patch = patch_alc269 },
 	{ .id = 0x10ec0861, .rev = 0x100340, .name = "ALC660",
 	  .patch = patch_alc861 },
 	{ .id = 0x10ec0660, .name = "ALC660-VD", .patch = patch_alc861vd },

@@ -810,7 +810,7 @@ int snd_pcm_hw_constraint_integer(struct snd_pcm_runtime *runtime, snd_pcm_hw_pa
 int snd_pcm_hw_constraint_list(struct snd_pcm_runtime *runtime, 
 			       unsigned int cond,
 			       snd_pcm_hw_param_t var,
-			       struct snd_pcm_hw_constraint_list *l);
+			       const struct snd_pcm_hw_constraint_list *l);
 int snd_pcm_hw_constraint_ratnums(struct snd_pcm_runtime *runtime, 
 				  unsigned int cond,
 				  snd_pcm_hw_param_t var,
@@ -1073,5 +1073,16 @@ static inline void snd_pcm_limit_isa_dma_size(int dma, size_t *max)
 #define PCM_RUNTIME_CHECK(sub) snd_BUG_ON(!(sub) || !(sub)->runtime)
 
 const char *snd_pcm_format_name(snd_pcm_format_t format);
+
+/**
+ * Get a string naming the direction of a stream
+ */
+static inline const char *snd_pcm_stream_str(struct snd_pcm_substream *substream)
+{
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		return "Playback";
+	else
+		return "Capture";
+}
 
 #endif /* __SOUND_PCM_H */
