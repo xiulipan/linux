@@ -370,8 +370,10 @@ static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		return -EINVAL;
 	}
 
+	dev_err(sdev->dev, "PXL: pcm trigger %d\n", cmd);
 	snd_sof_pcm_platform_trigger(sdev, substream, cmd);
 
+	dev_err(sdev->dev, "PXL: ipc trigger %d\n", cmd);
 	/* send IPC to the DSP */
 	ret = sof_ipc_tx_message(sdev->ipc, stream.hdr.cmd, &stream,
 				 sizeof(stream), &reply, sizeof(reply));

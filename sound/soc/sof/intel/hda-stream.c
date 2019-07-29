@@ -252,6 +252,7 @@ int hda_dsp_stream_trigger(struct snd_sof_dev *sdev,
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	case SNDRV_PCM_TRIGGER_STOP:
+		dev_err(sdev->dev, "PXL: DMA STOP %d\n", cmd);
 		snd_sof_dsp_update_bits(sdev, HDA_DSP_HDA_BAR,
 					sd_offset,
 					SOF_HDA_SD_CTL_DMA_START |
