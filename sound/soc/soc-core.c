@@ -1887,11 +1887,6 @@ match:
 
 static int soc_cleanup_card_resources(struct snd_soc_card *card)
 {
-	/* free the ALSA card at first; this syncs with pending operations */
-	if (card->snd_card) {
-		snd_card_free(card->snd_card);
-		card->snd_card = NULL;
-	}
 
 	/* remove and free each DAI */
 	soc_remove_dai_links(card);
@@ -1902,6 +1897,14 @@ static int soc_cleanup_card_resources(struct snd_soc_card *card)
 
 	snd_soc_dapm_free(&card->dapm);
 	soc_cleanup_card_debugfs(card);
+
+	/* free the ALSA card at last as above snd_soc_dapm_remove will
+	 * check if card is NULL.
+	 */
+	if (card->snd_card) {
+		snd_card_free(card->snd_card);
+		card->snd_card = NULL;
+	}
 
 	/* remove the card */
 	if (card->remove)
