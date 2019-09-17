@@ -440,6 +440,7 @@ static const struct pci_device_id sof_pci_ids[] = {
 		.driver_data = (unsigned long)&ehl_desc},
 #endif
 	{ 0, }
+	dddd
 };
 MODULE_DEVICE_TABLE(pci, sof_pci_ids);
 
