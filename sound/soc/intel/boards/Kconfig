@@ -543,6 +543,23 @@ config SND_SOC_INTEL_SOF_DA7219_MAX98373_MACH
 
 endif ## SND_SOC_SOF_JASPERLAKE
 
+if SND_SOC_SOF_TIGERLAKE
+
+config SND_SOC_INTEL_TGL_I2S_RT1308_MACH
+	tristate "TGL with RT1308 in I2S Mode"
+	depends on I2C && ACPI
+	depends on MFD_INTEL_LPSS || COMPILE_TEST
+	select SND_HDA_CODEC_HDMI if SND_SOC_SOF_HDA_AUDIO_CODEC
+	select SND_SOC_RT1308
+	select SND_SOC_DMIC
+	help
+	   This adds support for ASoC machine driver for Tigerlake platforms
+	   with RT1308 I2S audio codec.
+	   Say Y if you have such a device.
+	   If unsure select "N".
+
+endif ## SND_SOC_SOF_TIGERLAKE
+
 if SND_SOC_SOF_ELKHARTLAKE
 
 config SND_SOC_INTEL_EHL_RT5660_MACH
