@@ -34,11 +34,6 @@ static int sof_nocodec_bes_setup(struct device *dev,
 		if (!dlc)
 			return -ENOMEM;
 
-		links[i].name = devm_kasprintf(dev, GFP_KERNEL,
-					       "NoCodec-%d", i);
-		if (!links[i].name)
-			return -ENOMEM;
-
 		links[i].cpus = &dlc[0];
 		links[i].codecs = &dlc[1];
 		links[i].platforms = &dlc[2];
@@ -53,6 +48,18 @@ static int sof_nocodec_bes_setup(struct device *dev,
 		links[i].platforms->name = dev_name(dev);
 		links[i].codecs->dai_name = "snd-soc-dummy-dai";
 		links[i].codecs->name = "snd-soc-dummy";
+
+		if (!strcmp(ops->drv[i].name, "DMIC01 Pin")) {
+			links[i].name = "dmic01";
+		} else if (!strcmp(ops->drv[i].name, "DMIC16k Pin")) {
+			links[i].name = "dmic16k";
+		} else {
+			links[i].name = devm_kasprintf(dev, GFP_KERNEL,
+						       "NoCodec-%d", i);
+		}
+		if (!links[i].name)
+			return -ENOMEM;
+
 		if (ops->drv[i].playback.channels_min)
 			links[i].dpcm_playback = 1;
 		if (ops->drv[i].capture.channels_min)
