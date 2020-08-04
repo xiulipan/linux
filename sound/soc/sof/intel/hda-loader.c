@@ -325,7 +325,7 @@ int hda_dsp_cl_boot_firmware_iccmax(struct snd_sof_dev *sdev)
 	iccmax_stream = get_stream_with_tag(sdev, iccmax_tag, SNDRV_PCM_STREAM_CAPTURE);
 	if (!iccmax_stream) {
 		dev_err(sdev->dev, "error: could not get stream with stream tag %d\n", iccmax_tag);
-		ret = -ENODEV;
+		return -ENODEV;
 	} else {
 		ret = hda_dsp_cl_boot_firmware(sdev);
 	}
