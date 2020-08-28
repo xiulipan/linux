@@ -20,9 +20,6 @@ install:
   - pushd kconfig
   - &short_log git --no-pager log --oneline --graph --decorate --max-count=5
   - popd
-  - mkdir 0day
-  - wget https://raw.githubusercontent.com/intel/lkp-tests/master/sbin/make.cross -O make.cross
-  - chmod +x make.cross
   - mkdir -p $PWD/bin
   - git clone --depth 1 --branch v0.6.2 git://git.kernel.org/pub/scm/devel/sparse/sparse.git
   - BINDIR=$PWD/bin make -C sparse install
@@ -72,5 +69,5 @@ jobs:
     - name: "BUILD CLANG SOF Kernel x86_64"
       script:
         - bash kconfig/kconfig-sof-default.sh
-        - COMPILER_INSTALL_PATH=$PWD/0day COMPILER=clang ./make.cross ARCH=x86_64 olddefconfig
-        - COMPILER_INSTALL_PATH=$PWD/0day COMPILER=clang ./make.cross ARCH=x86_64
+        - make CC=clang ARCH=x86_64 olddefconfig
+        - make CC=clang ARCH=x86_64
