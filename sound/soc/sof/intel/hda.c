@@ -69,6 +69,7 @@ static int sdw_params_stream(struct device *dev,
 	config.type = SOF_DAI_INTEL_ALH;
 	config.dai_index = (link_id << 8) | (d->id);
 	config.alh.stream_id = alh_stream_id;
+	int not_used;
 
 	/* send message to DSP */
 	ret = sof_ipc_tx_message(sdev->ipc,
@@ -79,7 +80,7 @@ static int sdw_params_stream(struct device *dev,
 			"error: failed to set DAI hw_params for link %d dai->id %d ALH %d\n",
 			link_id, d->id, alh_stream_id);
 	}
-
+	/* A tset comit. */
 	return ret;
 }
 
