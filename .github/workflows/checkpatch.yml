@@ -1,0 +1,50 @@
+---
+# Tools that can save round-trips to github and a lot of time:
+#
+# yamllint -f parsable pull_request.yml
+# pip3 install ruamel.yaml.cmd
+# yaml merge-expand pull_request.yml exp.yml &&
+#    diff -w -u pull_request.yml exp.yml
+#
+# github.com also has a powerful web editor that can be used without
+# committing.
+
+# This is the name of this workflow and should technically be called
+# something like "Main Workflow" but the place where most people see
+# this name is the Checks window next to other, non-github checks.
+name: checkpatch
+
+# yamllint disable-line rule:truthy
+on: pull_request
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up env for checkpath
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget jq codespell
+
+      - name: check patch
+        run: |
+          TEMP_PATH="$(mktemp -d)"
+          export PATH="${TEMP_PATH}:$PATH"
+          export REVIEWDOG_GITHUB_API_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b "${TEMP_PATH}" 2>&1
+          PR=${GITHUB_REF#"refs/pull/"}
+          PRNUM=${PR%"/merge"}
+          # get GitHub PR commits API URL
+          URL="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PRNUM}/commits"
+          patchlist=$(curl $URL -X GET -s | jq '.[].html_url' -r)
+          # checkpatch.pl on each patch
+          echo
+          for patchurl in $patchlist; do
+              sha=${patchurl##*/}
+              wget -q "${patchurl}.patch" -O "${sha}.patch"
+              ${GITHUB_WORKSPACE}/.github/actions/review.sh "${sha}.patch" || RET=1
+              echo
+          done
+          exit $RET

@@ -1,0 +1,45 @@
+---
+# Tools that can save round-trips to github and a lot of time:
+#
+# yamllint -f parsable pull_request.yml
+# pip3 install ruamel.yaml.cmd
+# yaml merge-expand pull_request.yml exp.yml &&
+#    diff -w -u pull_request.yml exp.yml
+#
+# github.com also has a powerful web editor that can be used without
+# committing.
+
+# This is the name of this workflow and should technically be called
+# something like "Main Workflow" but the place where most people see
+# this name is the Checks window next to other, non-github checks.
+name: GitHub Actions
+
+# yamllint disable-line rule:truthy
+on:
+  push:
+    branches:
+      - 'topic/sof-dev'
+  pull_request:
+    branches:
+      - 'topic/sof-dev'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Some jobs may not need submodules but for now our CMakeLists.txt
+# systemically downloads them anyway when missing at build time. Easier
+# and cleaner to clone everything at once.
+
+jobs:
+
+  test:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: set up env
+        run: |
+          gcc -v
+          clang -v
+
