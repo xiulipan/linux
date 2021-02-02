@@ -23,13 +23,17 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: set up env for checkpath
+      - name: Set up env for checkpath
         run: |
           sudo apt-get update
           sudo apt-get install -y wget jq codespell
 
       - name: check patch
         run: |
+          TEMP_PATH="$(mktemp -d)"
+          export PATH="${TEMP_PATH}:$PATH"
+          export REVIEWDOG_GITHUB_API_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b "${TEMP_PATH}" 2>&1
           PR=${GITHUB_REF#"refs/pull/"}
           PRNUM=${PR%"/merge"}
           # get GitHub PR commits API URL
@@ -40,6 +44,7 @@ jobs:
           for patchurl in $patchlist; do
               sha=${patchurl##*/}
               wget -q "${patchurl}.patch" -O "${sha}.patch"
-              ./scripts/checkpatch.pl --no-tree --strict --codespell "${sha}.patch" || true
+              ${GITHUB_WORKSPACE}/.github/actions/review.sh "${sha}.patch" || RET=1
               echo
           done
+          exit $RET
