@@ -26,6 +26,12 @@
 static int hda_codec_mask = -1;
 module_param_named(codec_mask, hda_codec_mask, int, 0444);
 MODULE_PARM_DESC(codec_mask, "SOF HDA codec mask for probing");
+
+/* getter helper function */
+int hda_get_codec_mask(void)
+{
+	return hda_codec_mask;
+}
 #endif
 
 /*

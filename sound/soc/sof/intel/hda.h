@@ -650,6 +650,11 @@ void sof_hda_bus_init(struct hdac_bus *bus, struct device *dev);
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
 /*
+ * HDA Codec module_param getter
+ */
+int hda_get_codec_mask(void);
+
+/*
  * HDA Codec operations.
  */
 void hda_codec_probe_bus(struct snd_sof_dev *sdev,
