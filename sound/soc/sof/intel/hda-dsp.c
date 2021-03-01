@@ -237,6 +237,25 @@ bool hda_dsp_core_is_enabled(struct snd_sof_dev *sdev,
 	return is_enable;
 }
 
+bool hda_dsp_core_is_disabled(struct snd_sof_dev *sdev,
+			      unsigned int core_mask)
+{
+	int val;
+	bool is_disabled;
+
+	val = snd_sof_dsp_read(sdev, HDA_DSP_BAR, HDA_DSP_REG_ADSPCS);
+
+	is_disabled = !(val & HDA_DSP_ADSPCS_CPA_MASK(core_mask)) &&
+		      !(val & HDA_DSP_ADSPCS_SPA_MASK(core_mask)) &&
+		      (val & HDA_DSP_ADSPCS_CRST_MASK(core_mask)) &&
+		      (val & HDA_DSP_ADSPCS_CSTALL_MASK(core_mask));
+
+	dev_dbg(sdev->dev, "DSP core(s) disabled? %d : core_mask %x\n",
+		is_disabled, core_mask);
+
+	return is_disabled;
+}
+
 int hda_dsp_enable_core(struct snd_sof_dev *sdev, unsigned int core_mask)
 {
 	struct sof_intel_hda_dev *hda = sdev->pdata->hw_pdata;

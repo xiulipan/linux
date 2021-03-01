@@ -504,6 +504,8 @@ int hda_dsp_enable_core(struct snd_sof_dev *sdev, unsigned int core_mask);
 int hda_dsp_core_power_down(struct snd_sof_dev *sdev, unsigned int core_mask);
 bool hda_dsp_core_is_enabled(struct snd_sof_dev *sdev,
 			     unsigned int core_mask);
+bool hda_dsp_core_is_disabled(struct snd_sof_dev *sdev,
+			      unsigned int core_mask);
 int hda_dsp_core_reset_power_down(struct snd_sof_dev *sdev,
 				  unsigned int core_mask);
 void hda_dsp_ipc_int_enable(struct snd_sof_dev *sdev);
