@@ -311,7 +311,7 @@ int hda_dsp_core_reset_power_down(struct snd_sof_dev *sdev,
 	}
 
 	/* make sure we are in OFF state */
-	if (hda_dsp_core_is_enabled(sdev, core_mask)) {
+	if (!hda_dsp_core_is_disabled(sdev, core_mask)) {
 		dev_err(sdev->dev, "error: dsp core disable fail mask %x: %d\n",
 			core_mask, ret);
 		ret = -EIO;
