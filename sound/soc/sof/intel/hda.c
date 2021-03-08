@@ -496,10 +496,13 @@ static int hda_init(struct snd_sof_dev *sdev)
 	/* HDA base */
 	sdev->bar[HDA_DSP_HDA_BAR] = bus->remap_addr;
 
-	/* init i915 and HDMI codecs */
-	ret = hda_codec_i915_init(sdev);
-	if (ret < 0)
-		dev_warn(sdev->dev, "init of i915 and HDMI codec failed\n");
+	/* do not init i915 codec if idisp codec is masked */
+	if (HDA_IDISP_CODEC(hda_get_codec_mask())) {
+		/* init i915 and HDMI codecs */
+		ret = hda_codec_i915_init(sdev);
+		if (ret < 0)
+			dev_warn(sdev->dev, "init of i915 and HDMI codec failed\n");
+	}
 
 	/* get controller capabilities */
 	ret = hda_dsp_ctrl_get_caps(sdev);
@@ -897,7 +900,9 @@ free_streams:
 hdac_bus_unmap:
 	platform_device_unregister(hdev->dmic_dev);
 	iounmap(bus->remap_addr);
-	hda_codec_i915_exit(sdev);
+	/* skip i915 codec exit if idisp codec is masked */
+	if (HDA_IDISP_CODEC(hda_get_codec_mask()))
+		hda_codec_i915_exit(sdev);
 err:
 	return ret;
 }
@@ -953,7 +958,9 @@ int hda_dsp_remove(struct snd_sof_dev *sdev)
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
 	snd_hdac_ext_bus_exit(bus);
 #endif
-	hda_codec_i915_exit(sdev);
+	/* skip i915 codec exit if idisp codec is masked */
+	if (HDA_IDISP_CODEC(hda_get_codec_mask()))
+		hda_codec_i915_exit(sdev);
 
 	return 0;
 }
